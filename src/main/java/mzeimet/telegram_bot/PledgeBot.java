@@ -1,5 +1,6 @@
 package mzeimet.telegram_bot;
 
+import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.temporal.WeekFields;
 import java.util.List;
@@ -26,7 +27,7 @@ public class PledgeBot extends TelegramLongPollingBot {
 	};
 
 	private static enum Users {
-		MARVIN, DENNIS, PATRICK, STEVEN
+		Marvin, Dennis, Patrick, Steven
 	}
 
 	public PledgeBot() {
@@ -41,34 +42,31 @@ public class PledgeBot extends TelegramLongPollingBot {
 			String txtOut = "";
 			if (txtIn.contains("@" + getBotUsername()))
 				txtIn = txtIn.replace("@" + getBotUsername(), "");
-			// readReser
 			Command command = convertCommand(txtIn);
+			SendMessage message = new SendMessage().setChatId(update.getMessage().getChatId());
 			switch (command) {
 			case READ:
 				refreshPledges();
-				txtOut = "Die heutigen Gelöbnisse sind: \n 1. " + pledges.get(0) + "\n 2. " + pledges.get(1) + "\n 3. "
-						+ pledges.get(2);
+				message.setText( "Die heutigen Gelöbnisse sind: \n1. " + pledges.get(0) + "\n2. " + pledges.get(1) + "\n3. "
+						+ pledges.get(2));
 				break;
 			case SHOW:
 				break;
 
 			case RESERVE:
-				try {
-					reserve(txtIn);
-				} catch (IllegalArgumentException e) {
-					txtOut = e.getMessage();
-				}
+				txtIn = txtIn.replace(RESERVE_PLEDGE_COMMAND, "");
+				refreshPledges();
+//				txtOut = reserve(txtIn);
 				break;
 
 			case WHERE:
-				txtOut = whichUser();
+				message.setText(whichUser());
 				break;
 			case NONE:
 				return;
 			default:
-				txtOut = ERROR_INTERPRET_COMMAND;
+				message.setText(ERROR_INTERPRET_COMMAND);
 			}
-			SendMessage message = new SendMessage().setChatId(update.getMessage().getChatId()).setText(txtOut);
 			try {
 				sendMessage(message); // Call method to send the message
 			} catch (TelegramApiException e) {
@@ -82,8 +80,10 @@ public class PledgeBot extends TelegramLongPollingBot {
 		// Or use a specific locale, or configure your own rules
 		WeekFields weekFields = WeekFields.of(Locale.GERMANY);
 		int weekNumber = date.get(weekFields.weekOfWeekBasedYear());
+		if(date.getDayOfWeek().equals(DayOfWeek.SATURDAY) || date.getDayOfWeek().equals(DayOfWeek.SUNDAY))
+			weekNumber += 1;
 		weekNumber %= 4;
-		return "Diese Woche sind wir bei: " + Users.values()[weekNumber].toString();
+		return "Nächsten Freitag sind wir bei: " + Users.values()[weekNumber].toString();
 	}
 
 	private void reserve(String txtIn) {
@@ -95,7 +95,7 @@ public class PledgeBot extends TelegramLongPollingBot {
 	}
 
 	public String getBotToken() {
-		return "349594069:AAH6myWlwhsxOeTCPSy-WXWdyEDznva5N7M";
+		return System.getenv("TOKEN");
 	}
 
 	private static Command convertCommand(String str) {
@@ -113,7 +113,9 @@ public class PledgeBot extends TelegramLongPollingBot {
 	private void refreshPledges() {
 		LocalDateTime now = LocalDateTime.now();
 		if (now.getDayOfMonth() != refreshTimestamp.getDayOfMonth()
-				|| now.getHour() > 8 && refreshTimestamp.getHour() <= 8)
+				|| now.getHour() > 8 && refreshTimestamp.getHour() <= 8){
 			pledges = WebsiteReader.getPledges(url);
+			refreshTimestamp = now;
+		}
 	}
 }
