@@ -163,10 +163,14 @@ public class PledgeBot extends TelegramLongPollingBot {
 		}
 		if (data.length() == 2) {
 			try {
-				reserve(data);
-				String pledge = pledges.get(Integer.valueOf(data.substring(0, 1)));
-				String user = Users.values()[Integer.valueOf(data.substring(1, 2))].toString();
-				message.setText("Okay, hab " + pledge + " für " + user + " reserviert!");
+				if (reserve(data)) {
+					String pledge = pledges.get(Integer.valueOf(data.substring(0, 1)));
+					String user = Users.values()[Integer.valueOf(data.substring(1, 2))].toString();
+					message.setText("Okay, hab " + pledge + " für " + user + " reserviert!");
+				} else {
+					message.setText("Was los mit dir faggot, iss doch schon reserviert");
+				}
+
 			} catch (Exception e) {
 				e.printStackTrace();
 				message.setText("Sorry, hab beim Reservieren verkackt");
@@ -244,11 +248,15 @@ public class PledgeBot extends TelegramLongPollingBot {
 
 	}
 
-	private void reserve(String data) throws IOException {
+	private boolean reserve(String data) throws IOException {
 		int pledgeOrderNr = Integer.valueOf(data.substring(0, 1));
 		String name = pledges.get(pledgeOrderNr);
 		int userNr = Integer.valueOf(data.substring(1, 2));
 		PledgeReservation pR = new PledgeReservation(name, userNr, pledgeOrderNr);
+		for (PledgeReservation p : getReservedPledges()) {
+			if (p.getName().equals(name))
+				return false;
+		}
 		writeReservation(pR);
 	}
 
@@ -318,20 +326,24 @@ public class PledgeBot extends TelegramLongPollingBot {
 
 	}
 
+	/**
+	 * Gibt eine Map für die heutigen pledges zurück, ob sie verfügbar sind oder
+	 * nicht
+	 */
 	private Map<String, Boolean> getAvailablePledges() throws IOException {
 		Map<String, Boolean> notReservedPledges = new HashMap<String, Boolean>();
 		for (String s : pledges) {
 			notReservedPledges.put(s, true);
 		}
 		List<PledgeReservation> reserved = getReservedPledges();
-		for (int j = notReservedPledges.size() - 1; j >= 0; j--) {
-			for (PledgeReservation p : reserved) {
-				if (p.getName().equals(pledges.get(j))) {
-					notReservedPledges.remove(pledges.get(j));
-					notReservedPledges.put(pledges.get(j), false);
-				}
+		for (int i = 2; i >= 0; i--) {
+			if (reserved.get(i) != null) {
+				String pledge = pledges.get(i);
+				notReservedPledges.remove(pledge);
+				notReservedPledges.put(pledge, false);
 			}
 		}
+
 		return notReservedPledges;
 	}
 
