@@ -258,6 +258,7 @@ public class PledgeBot extends TelegramLongPollingBot {
 				return false;
 		}
 		writeReservation(pR);
+		return true;
 	}
 
 	private void writeReservation(PledgeReservation pR) throws IOException {
@@ -327,24 +328,36 @@ public class PledgeBot extends TelegramLongPollingBot {
 	}
 
 	/**
-	 * Gibt eine Map für die heutigen pledges zurück, ob sie verfügbar sind oder
-	 * nicht
+	 * Gibt eine Map für die heutigen pledges zurück, ob sie verfügbar sind (true) oder
+	 * nicht (false)
 	 */
 	private Map<String, Boolean> getAvailablePledges() throws IOException {
-		Map<String, Boolean> notReservedPledges = new HashMap<String, Boolean>();
-		for (String s : pledges) {
-			notReservedPledges.put(s, true);
-		}
+		Map<String, Boolean> pledgesAvailable = new HashMap<String, Boolean>();
 		List<PledgeReservation> reserved = getReservedPledges();
-		for (int i = 2; i >= 0; i--) {
-			if (reserved.get(i) != null) {
-				String pledge = pledges.get(i);
-				notReservedPledges.remove(pledge);
-				notReservedPledges.put(pledge, false);
-			}
+		boolean firstReserved = false;
+		boolean secondReserved = false;
+		boolean thirdReserved = false;
+		for (PledgeReservation reservation : reserved) {
+			if (reservation.getPledgeOrderNr() == 0)
+				firstReserved = true;
+			else if (reservation.getPledgeOrderNr() == 1)
+				secondReserved = true;
+			else if (reservation.getPledgeOrderNr() == 2)
+				thirdReserved = true;
 		}
-
-		return notReservedPledges;
+		if (firstReserved)
+			pledgesAvailable.put(pledges.get(0), false);
+		else
+			pledgesAvailable.put(pledges.get(0), true);
+		if (secondReserved)
+			pledgesAvailable.put(pledges.get(1), false);
+		else
+			pledgesAvailable.put(pledges.get(1), true);
+		if (thirdReserved)
+			pledgesAvailable.put(pledges.get(2), false);
+		else
+			pledgesAvailable.put(pledges.get(2), true);
+		return pledgesAvailable;
 	}
 
 	private List<PledgeReservation> getReservedPledges() throws IOException {
