@@ -18,6 +18,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Timer;
 import java.util.stream.Stream;
 
 import org.apache.commons.io.FileUtils;
@@ -29,104 +30,109 @@ import org.telegram.telegrambots.api.objects.replykeyboard.buttons.InlineKeyboar
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.exceptions.TelegramApiException;
 
+import mzeimet.telegram_bot.Config.Users;
+
 public class PledgeBot extends TelegramLongPollingBot {
 
-	private static final String SHOW_TODAY_PLEDGES_COMMAND = "/showtoday";
-	private static final String SHOW_RESERVED_PLEDGES_COMMAND = "/showreserved";
-	private static final String RESERVE_PLEDGE_COMMAND = "/reserve";
-	private static final String WHERE_COMMAND = "/where";
-	private static final String DELETE_COMMAND = "/delete";
-	private static final String url = "https://esoleaderboards.com/widgets/pledgeometer.php/";
-	private static final String ERROR_INTERPRET_COMMAND = "Beim Parsen des Befehls ist ein Fehler aufgetreten. Wadafaq.";
-	private static final String FILE_PATH = "./reservation.txt";
 	private List<String> pledges;
 	private LocalDateTime refreshTimestamp;
 
 	private static enum Command {
-		READ, NONE, SHOW_TODAY, SHOW_RESERVED, WHERE, CANCEL
+		READ, NONE, SHOW_TODAY, SHOW_RESERVED, WHERE, DELETE
 	};
 
-	private static enum Users {
-		Marvin, Dennis, Patrick, Steven
-	}
+	private Timer timer;
 
 	public PledgeBot() {
-		refreshTimestamp = LocalDateTime.now().minusDays(1); // refresht auf
-																// jeden dann
+		refreshTimestamp = LocalDateTime.now().minusDays(1);
+		timer = new Timer();
+		addStartCrons();
+	}
+	
+	private void addStartCrons(){
+		CronJob cronjob = new ShowTodayCronjob(this);
+		addCronJob(cronjob);
+	}
+	
+	public void addCronJob(CronJob cron){
+		timer.schedule(cron, cron.getSecondsTillNoon() * 1000);
 	}
 
 	public void onUpdateReceived(Update update) {
-		// We check if the update has a message and the message has text
 		if (update.hasMessage() && update.getMessage().hasText()) {
-			String txtIn = update.getMessage().getText();
-			if (txtIn.contains("@" + getBotUsername()))
-				txtIn = txtIn.replace("@" + getBotUsername(), "");
-			Command command = convertCommand(txtIn);
 			SendMessage message = new SendMessage().setChatId(update.getMessage().getChatId());
-			switch (command) {
-			case READ:
-				refreshPledges();
-				setReadText(message);
-				break;
-			case SHOW_TODAY:
-				showAvailablePledges(message);
-				break;
-
-			case SHOW_RESERVED:
-				refreshPledges();
-				getAvailablePledgesButtons(message);
-				break;
-
-			case WHERE:
-				message.setText(whichUser());
-				break;
-			case CANCEL:
-				try {
-					showCancelButtons(message);
-				} catch (IOException e1) {
-					message.setText("Sorry, hab beim Lesen der Gelöbnisse verkackt :(");
-					e1.printStackTrace();
-				}
-				break;
-			case NONE:
-				return;
-			default:
-				message.setText(ERROR_INTERPRET_COMMAND);
-			}
-			try {
-				sendMessage(message); // Call method to send the message
-			} catch (TelegramApiException e) {
-				e.printStackTrace();
-			}
-		}
-		if (update.hasCallbackQuery()) {
+			executeCommand(message, update.getMessage().getText());
+		} else if (update.hasCallbackQuery()) {
 			String data = update.getCallbackQuery().getData();
 			SendMessage message = new SendMessage().setChatId(update.getCallbackQuery().getMessage().getChatId());
-			if (data.contains("/reserve")) {
-				reserveCallback(message, data);
+			executeCallback(message, data, update.getCallbackQuery().getId());
+		}
+	}
 
-			} else if (data.contains("/cancel")) {
-				data = data.replace("/cancel", "");
-				deleteReservation(message, data);
-			} else {
-				throw new IllegalArgumentException("Nicht erwartete Callback Query!");
-			}
+	private void executeCallback(SendMessage message, String data, String callbackQueryId) {
+		if (data.contains("/reserve")) {
+			reserveCallback(message, data);
 
+		} else if (data.contains("/cancel")) {
+			data = data.replace("/cancel", "");
+			deleteReservation(message, data);
+		} else {
+			throw new IllegalArgumentException("Nicht erwartete Callback Query!");
+		}
+		try {
+			sendMessage(message);
+			AnswerCallbackQuery q = new AnswerCallbackQuery();
+			q.setCallbackQueryId(callbackQueryId);
+			answerCallbackQuery(q);
+		} catch (TelegramApiException e) {
+			e.printStackTrace();
+		}
+	}
+
+	public void executeCommand(SendMessage message, String txtIn) {
+		if (txtIn.contains("@" + getBotUsername()))
+			txtIn = txtIn.replace("@" + getBotUsername(), "");
+		Command command = convertCommand(txtIn);
+		switch (command) {
+		case READ:
+			refreshPledges();
+			setReadText(message);
+			break;
+		case SHOW_TODAY:
+			showAvailablePledges(message);
+			break;
+
+		case SHOW_RESERVED:
+			refreshPledges();
+			getAvailablePledgesButtons(message);
+			break;
+
+		case WHERE:
+			message.setText(whichUser());
+			break;
+		case DELETE:
 			try {
-				sendMessage(message);
-				AnswerCallbackQuery q = new AnswerCallbackQuery();
-				q.setCallbackQueryId(update.getCallbackQuery().getId());
-				answerCallbackQuery(q);
-			} catch (TelegramApiException e) {
-				e.printStackTrace();
+				showCancelButtons(message);
+			} catch (IOException e1) {
+				message.setText("Sorry, hab beim Lesen der Gelöbnisse verkackt :(");
+				e1.printStackTrace();
 			}
-
+			break;
+		case NONE:
+			return;
+		default:
+			message.setText(Config.ERROR_INTERPRET_COMMAND);
+		}
+		try {
+			sendMessage(message); // Call method to send the message
+		} catch (TelegramApiException e) {
+			e.printStackTrace();
 		}
 	}
 
 	private void deleteReservation(SendMessage message, String pledgeName) {
 		try {
-			File inputFile = new File(FILE_PATH);
+			File inputFile = new File(Config.FILE_PATH);
 			File tempFile = new File("./tmpReservation.txt");
 
 			BufferedReader reader = new BufferedReader(new FileReader(inputFile));
@@ -262,11 +268,11 @@ public class PledgeBot extends TelegramLongPollingBot {
 	}
 
 	private void writeReservation(PledgeReservation pR) throws IOException {
-		File f = new File(FILE_PATH);
+		File f = new File(Config.FILE_PATH);
 		if (!f.exists())
 			f.createNewFile();
 		String txt = pR.toString() + "\n";
-		Files.write(Paths.get(FILE_PATH), txt.getBytes(), StandardOpenOption.APPEND);
+		Files.write(Paths.get(Config.FILE_PATH), txt.getBytes(), StandardOpenOption.APPEND);
 	}
 
 	private void getAvailableUserButtons(SendMessage message, String pledgeNr) {
@@ -328,8 +334,8 @@ public class PledgeBot extends TelegramLongPollingBot {
 	}
 
 	/**
-	 * Gibt eine Map für die heutigen pledges zurück, ob sie verfügbar sind (true) oder
-	 * nicht (false)
+	 * Gibt eine Map für die heutigen pledges zurück, ob sie verfügbar sind
+	 * (true) oder nicht (false)
 	 */
 	private Map<String, Boolean> getAvailablePledges() throws IOException {
 		Map<String, Boolean> pledgesAvailable = new HashMap<String, Boolean>();
@@ -362,10 +368,10 @@ public class PledgeBot extends TelegramLongPollingBot {
 
 	private List<PledgeReservation> getReservedPledges() throws IOException {
 		List<PledgeReservation> ret = new ArrayList<PledgeReservation>();
-		File f = new File(FILE_PATH);
+		File f = new File(Config.FILE_PATH);
 		if (!f.exists())
 			return ret;
-		Stream<String> stream = Files.lines(Paths.get(FILE_PATH));
+		Stream<String> stream = Files.lines(Paths.get(Config.FILE_PATH));
 		Iterator<String> i = stream.iterator();
 		while (i.hasNext()) {
 			String fields[] = i.next().split(",");
@@ -386,16 +392,16 @@ public class PledgeBot extends TelegramLongPollingBot {
 
 	private static Command convertCommand(String str) {
 		// READ, NONE, SHOW_TODAY, SHOW_RESERVED, WHERE, CANCEL
-		if (str.contains(SHOW_TODAY_PLEDGES_COMMAND))
+		if (str.contains(Config.SHOW_TODAY_PLEDGES_COMMAND))
 			return Command.READ;
-		if (str.contains(SHOW_RESERVED_PLEDGES_COMMAND))
+		if (str.contains(Config.SHOW_RESERVED_PLEDGES_COMMAND))
 			return Command.SHOW_TODAY;
-		if (str.contains(RESERVE_PLEDGE_COMMAND))
+		if (str.contains(Config.RESERVE_PLEDGE_COMMAND))
 			return Command.SHOW_RESERVED;
-		if (str.contains(WHERE_COMMAND))
+		if (str.contains(Config.WHERE_COMMAND))
 			return Command.WHERE;
-		if (str.contains(DELETE_COMMAND))
-			return Command.CANCEL;
+		if (str.contains(Config.DELETE_COMMAND))
+			return Command.DELETE;
 		return Command.NONE;
 	}
 
@@ -403,7 +409,7 @@ public class PledgeBot extends TelegramLongPollingBot {
 		LocalDateTime now = LocalDateTime.now();
 		if (now.getDayOfMonth() != refreshTimestamp.getDayOfMonth()
 				|| now.getHour() > 8 && refreshTimestamp.getHour() <= 8) {
-			pledges = WebsiteReader.getPledges(url);
+			pledges = WebsiteReader.getPledges(Config.URL);
 			refreshTimestamp = now;
 		}
 	}
