@@ -18,10 +18,10 @@ public abstract class CronJob extends TimerTask {
 
 	public long getSecondsTillNoon() {
 		LocalDate day = LocalDate.now(ZoneId.of("Europe/Berlin"));
-		if (LocalDateTime.now().getHour() > 12)
+		if (LocalDateTime.now().getHour() >= 12)
 			day = day.plusDays(1);
 		LocalDateTime nextNoon = LocalDateTime.of(day, LocalTime.NOON);
-		long secondsTillTwelve = ChronoUnit.MINUTES.between( LocalDateTime.now(), nextNoon) * 60;
+		long secondsTillTwelve = ChronoUnit.SECONDS.between( LocalDateTime.now(), nextNoon);
 		return secondsTillTwelve;
 	}
 

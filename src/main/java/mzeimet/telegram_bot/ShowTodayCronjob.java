@@ -1,5 +1,7 @@
 package mzeimet.telegram_bot;
 
+import java.io.IOException;
+
 import org.telegram.telegrambots.api.methods.send.SendMessage;
 
 public class ShowTodayCronjob extends CronJob {
@@ -11,7 +13,10 @@ public class ShowTodayCronjob extends CronJob {
 	@Override
 	public void run() {
 		SendMessage message = new SendMessage().setChatId(Config.MY_CHAT_ID);
-		bot.executeCommand(message, Config.SHOW_RESERVED_PLEDGES_COMMAND);
-		bot.addCronJob(new ShowTodayCronjob(bot));
+		try {
+			bot.executeCommand(message, Config.SHOW_TODAY_PLEDGES_COMMAND);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 	}
 }

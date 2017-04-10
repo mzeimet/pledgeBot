@@ -48,28 +48,40 @@ public class PledgeBot extends TelegramLongPollingBot {
 		timer = new Timer();
 		addStartCrons();
 	}
-	
-	private void addStartCrons(){
+
+	private void addStartCrons() {
 		CronJob cronjob = new ShowTodayCronjob(this);
 		addCronJob(cronjob);
 	}
-	
-	public void addCronJob(CronJob cron){
-		timer.schedule(cron, cron.getSecondsTillNoon() * 1000);
+
+	public void addCronJob(CronJob cron) {
+		timer.schedule(cron, cron.getSecondsTillNoon() * 1000, Config.secondsPerDay);
 	}
 
 	public void onUpdateReceived(Update update) {
-		if (update.hasMessage() && update.getMessage().hasText()) {
-			SendMessage message = new SendMessage().setChatId(update.getMessage().getChatId());
-			executeCommand(message, update.getMessage().getText());
-		} else if (update.hasCallbackQuery()) {
-			String data = update.getCallbackQuery().getData();
-			SendMessage message = new SendMessage().setChatId(update.getCallbackQuery().getMessage().getChatId());
-			executeCallback(message, data, update.getCallbackQuery().getId());
+		try {
+			if (update.hasMessage() && update.getMessage().hasText()) {
+				SendMessage message = new SendMessage().setChatId(update.getMessage().getChatId());
+				executeCommand(message, update.getMessage().getText());
+			} else if (update.hasCallbackQuery()) {
+				String data = update.getCallbackQuery().getData();
+				SendMessage message = new SendMessage().setChatId(update.getCallbackQuery().getMessage().getChatId());
+				executeCallback(message, data, update.getCallbackQuery().getId());
+			}
+		} catch (Exception e) {
+			Logger.write(e.getStackTrace().toString());
+			SendMessage message = new SendMessage().setChatId(Config.MY_CHAT_ID);
+			message.setText(e.getStackTrace().toString());
+			try {
+				sendMessage(message);
+			} catch (TelegramApiException e1) {
+				Logger.write(e.getStackTrace().toString());
+				e1.printStackTrace();
+			}
 		}
 	}
 
-	private void executeCallback(SendMessage message, String data, String callbackQueryId) {
+	private void executeCallback(SendMessage message, String data, String callbackQueryId) throws Exception {
 		if (data.contains("/reserve")) {
 			reserveCallback(message, data);
 
@@ -89,39 +101,44 @@ public class PledgeBot extends TelegramLongPollingBot {
 		}
 	}
 
-	public void executeCommand(SendMessage message, String txtIn) {
+	public void executeCommand(SendMessage message, String txtIn) throws IOException {
 		if (txtIn.contains("@" + getBotUsername()))
 			txtIn = txtIn.replace("@" + getBotUsername(), "");
 		Command command = convertCommand(txtIn);
-		switch (command) {
-		case READ:
-			refreshPledges();
-			setReadText(message);
-			break;
-		case SHOW_TODAY:
-			showAvailablePledges(message);
-			break;
+		try {
+			switch (command) {
+			case READ:
+				refreshPledges();
+				setReadText(message);
+				break;
+			case SHOW_TODAY:
+				showAvailablePledges(message);
+				break;
 
-		case SHOW_RESERVED:
-			refreshPledges();
-			getAvailablePledgesButtons(message);
-			break;
+			case SHOW_RESERVED:
+				refreshPledges();
+				getAvailablePledgesButtons(message);
+				break;
 
-		case WHERE:
-			message.setText(whichUser());
-			break;
-		case DELETE:
-			try {
-				showCancelButtons(message);
-			} catch (IOException e1) {
-				message.setText("Sorry, hab beim Lesen der Gelöbnisse verkackt :(");
-				e1.printStackTrace();
+			case WHERE:
+				message.setText(whichUser());
+				break;
+			case DELETE:
+				try {
+					showCancelButtons(message);
+				} catch (IOException e1) {
+					message.setText("Sorry, hab beim Lesen der Gelöbnisse verkackt :(");
+					e1.printStackTrace();
+					throw e1;
+				}
+				break;
+			case NONE:
+				return;
+			default:
+				message.setText(Config.ERROR_INTERPRET_COMMAND);
 			}
-			break;
-		case NONE:
-			return;
-		default:
-			message.setText(Config.ERROR_INTERPRET_COMMAND);
+		} catch (Exception e) {
+			message.setText(message.getText() + " \n" + e.getStackTrace());
 		}
 		try {
 			sendMessage(message); // Call method to send the message
@@ -130,7 +147,7 @@ public class PledgeBot extends TelegramLongPollingBot {
 		}
 	}
 
-	private void deleteReservation(SendMessage message, String pledgeName) {
+	private void deleteReservation(SendMessage message, String pledgeName) throws Exception {
 		try {
 			File inputFile = new File(Config.FILE_PATH);
 			File tempFile = new File("./tmpReservation.txt");
@@ -148,21 +165,18 @@ public class PledgeBot extends TelegramLongPollingBot {
 			}
 			writer.close();
 			reader.close();
-			try {
-				FileUtils.copyFile(tempFile, inputFile);
-				FileUtils.forceDelete(tempFile);
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
+			FileUtils.copyFile(tempFile, inputFile);
+			FileUtils.forceDelete(tempFile);
 		} catch (Exception e) {
 			e.printStackTrace();
 			message.setText("Sorry, hab beim Löschen aus der Datei verkackt :(");
+			throw e;
 		}
 		message.setText("Jo habs gelöscht!");
 
 	}
 
-	private void reserveCallback(SendMessage message, String data) {
+	private void reserveCallback(SendMessage message, String data) throws Exception {
 		data = data.replace("/reserve", "");
 		if (data.length() == 1) {
 			getAvailableUserButtons(message, data);
@@ -180,6 +194,7 @@ public class PledgeBot extends TelegramLongPollingBot {
 			} catch (Exception e) {
 				e.printStackTrace();
 				message.setText("Sorry, hab beim Reservieren verkackt");
+				throw e;
 			}
 
 		}
@@ -207,14 +222,10 @@ public class PledgeBot extends TelegramLongPollingBot {
 
 	}
 
-	private void setReadText(SendMessage message) {
+	private void setReadText(SendMessage message) throws IOException {
 		String txt = "Die heutigen Gelöbnisse sind: \n1. " + pledges.get(0);
 		List<PledgeReservation> av = new ArrayList<PledgeReservation>();
-		try {
-			av = getReservedPledges();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
+		av = getReservedPledges();
 		for (PledgeReservation pR : av) {
 			if (pR.getPledgeOrderNr() == 0)
 				txt += " (reserviert von " + Users.values()[pR.getUserNr()] + " mit " + pR.getName() + ")";
@@ -233,13 +244,13 @@ public class PledgeBot extends TelegramLongPollingBot {
 		message.setText(txt);
 	}
 
-	private void showAvailablePledges(SendMessage message) {
+	private void showAvailablePledges(SendMessage message) throws IOException {
 		List<PledgeReservation> availablePledges;
 		try {
 			availablePledges = getReservedPledges();
 		} catch (IOException e) {
 			message.setText("Sorry hab beim auslesen der Datei verkackt! :(");
-			return;
+			throw e;
 		}
 		String txt = "Es sind noch keine Gelöbnisse reserviert!";
 		if (availablePledges.size() > 0) {
@@ -301,7 +312,7 @@ public class PledgeBot extends TelegramLongPollingBot {
 		return "Nächsten Freitag sind wir bei: " + Users.values()[weekNumber].toString();
 	}
 
-	private void getAvailablePledgesButtons(SendMessage message) {
+	private void getAvailablePledgesButtons(SendMessage message) throws IOException {
 		Map<String, Boolean> availablePledges;
 		try {
 			availablePledges = getAvailablePledges();
@@ -329,6 +340,7 @@ public class PledgeBot extends TelegramLongPollingBot {
 		} catch (IOException e) {
 			message.setText("Sorry hab beim auslesen der Datei verkackt! :(");
 			e.printStackTrace();
+			throw e;
 		}
 
 	}
