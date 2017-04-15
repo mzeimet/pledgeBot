@@ -16,6 +16,8 @@ import java.util.stream.Stream;
 
 import org.apache.commons.io.FileUtils;
 import org.telegram.telegrambots.api.methods.send.SendMessage;
+import org.telegram.telegrambots.api.methods.updatingmessages.EditMessageText;
+import org.telegram.telegrambots.api.objects.CallbackQuery;
 import org.telegram.telegrambots.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 
@@ -25,7 +27,7 @@ import mzeimet.telegram_bot.Config.Users;
 
 public class Reserve {
 
-	public static void deleteReservation(SendMessage message, String pledgeName) throws Exception {
+	public static void deleteReservation(EditMessageText editText, String data) throws Exception {
 		try {
 			File inputFile = new File(Config.FILE_PATH);
 			File tempFile = new File("./tmpReservation.txt");
@@ -37,7 +39,7 @@ public class Reserve {
 
 			while ((currentLine = reader.readLine()) != null) {
 				String trimmedLine = currentLine.trim();
-				if (trimmedLine.contains(pledgeName))
+				if (trimmedLine.contains(data))
 					continue;
 				writer.write(currentLine + System.getProperty("line.separator"));
 			}
@@ -47,10 +49,12 @@ public class Reserve {
 			FileUtils.forceDelete(tempFile);
 		} catch (Exception e) {
 			e.printStackTrace();
-			message.setText("Sorry, hab beim Löschen aus der Datei verkackt :(");
+			editText.setText("Sorry, hab beim Löschen aus der Datei verkackt :(");
+			editText.setReplyMarkup(null);
 			throw e;
 		}
-		message.setText("Jo habs gelöscht!");
+		editText.setText("Jo hab " + data + " gelöscht!");
+		editText.setReplyMarkup(null);
 
 	}
 
@@ -75,24 +79,24 @@ public class Reserve {
 
 	}
 
-	public static void reserveCallback(SendMessage message, String data, List<String> pledges) throws Exception {
-		data = data.replace("/reserve", "");
+	public static void reserveCallback(CallbackQuery query, EditMessageText editText, List<String> pledges) throws Exception {
+		String data = query.getData().replace("/reserve", "");
 		if (data.length() == 1) {
-			getAvailableUserButtons(message, data);
+			getAvailableUserButtons(editText, data, pledges);
 		}
 		if (data.length() == 2) {
 			try {
 				if (reserve(data, pledges)) {
 					String pledge = pledges.get(Integer.valueOf(data.substring(0, 1)));
 					String user = Users.values()[Integer.valueOf(data.substring(1, 2))].toString();
-					message.setText("Okay, hab " + pledge + " für " + user + " reserviert!");
+					editText.setText("Okay, hab " + pledge + " für " + user + " reserviert!");
 				} else {
-					message.setText("Was los mit dir faggot, iss doch schon reserviert");
+					editText.setText("Was los mit dir faggot, iss doch schon reserviert");
 				}
 
 			} catch (Exception e) {
 				e.printStackTrace();
-				message.setText("Sorry, hab beim Reservieren verkackt");
+				editText.setText("Sorry, hab beim Reservieren verkackt");
 				throw e;
 			}
 
@@ -138,7 +142,7 @@ public class Reserve {
 		return ret;
 	}
 
-	private static void getAvailableUserButtons(SendMessage message, String pledgeNr) {
+	private static void getAvailableUserButtons(EditMessageText editText, String pledgeNr, List<String> pledges) {
 		List<List<InlineKeyboardButton>> buttons = new ArrayList<List<InlineKeyboardButton>>();
 		for (int i = 0; i < Users.values().length; i++) {
 			InlineKeyboardButton button = new InlineKeyboardButton();
@@ -150,8 +154,8 @@ public class Reserve {
 		}
 		InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
 		inlineKeyboardMarkup.setKeyboard(buttons);
-		message.setText("Mmkay, und für wen willste reservieren?");
-		message.setReplyMarkup(inlineKeyboardMarkup);
+		editText.setText("Mmkay, und für wen willste " + pledges.get(Integer.valueOf(pledgeNr)) + " reservieren?");
+		editText.setReplyMarkup(inlineKeyboardMarkup);
 	}
 	
 	public static void showReservedPledges(SendMessage message) throws IOException {

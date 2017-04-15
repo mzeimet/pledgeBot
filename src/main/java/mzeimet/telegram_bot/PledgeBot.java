@@ -9,6 +9,8 @@ import java.util.Timer;
 
 import org.telegram.telegrambots.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.api.methods.send.SendMessage;
+import org.telegram.telegrambots.api.methods.updatingmessages.EditMessageText;
+import org.telegram.telegrambots.api.objects.CallbackQuery;
 import org.telegram.telegrambots.api.objects.Update;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.exceptions.TelegramApiException;
@@ -45,47 +47,10 @@ public class PledgeBot extends TelegramLongPollingBot {
 				SendMessage message = new SendMessage().setChatId(update.getMessage().getChatId());
 				executeCommand(message, update.getMessage().getText());
 			} else if (update.hasCallbackQuery()) {
-				String data = update.getCallbackQuery().getData();
-				SendMessage message = new SendMessage().setChatId(update.getCallbackQuery().getMessage().getChatId());
-				executeCallback(message, data, update.getCallbackQuery().getId());
+				executeCallback(update.getCallbackQuery());
 			}
 		} catch (Exception e) {
 			sendErrorToMe(e);
-		}
-	}
-
-	private void sendErrorToMe(Exception e) {
-		StringWriter sw = new StringWriter();
-		e.printStackTrace(new PrintWriter(sw));
-		String error = LocalDateTime.now() + " :\n" + sw.toString();
-		Logger.write(error);
-		SendMessage message = new SendMessage().setChatId(Config.MY_CHAT_ID);
-		message.setText(error);
-		try {
-			sendMessage(message);
-		} catch (TelegramApiException e1) {
-			Logger.write(e.getStackTrace().toString());
-			e1.printStackTrace();
-		}
-
-	}
-
-	private void executeCallback(SendMessage message, String data, String callbackQueryId) throws Exception {
-		if (data.contains("/reserve")) {
-			Reserve.reserveCallback(message, data, pledges);
-		} else if (data.contains("/cancel")) {
-			data = data.replace("/cancel", "");
-			Reserve.deleteReservation(message, data);
-		} else {
-			throw new IllegalArgumentException("Nicht erwartete Callback Query!");
-		}
-		try {
-			sendMessage(message);
-			AnswerCallbackQuery q = new AnswerCallbackQuery();
-			q.setCallbackQueryId(callbackQueryId);
-			answerCallbackQuery(q);
-		} catch (TelegramApiException e) {
-			e.printStackTrace();
 		}
 	}
 
@@ -133,6 +98,25 @@ public class PledgeBot extends TelegramLongPollingBot {
 		}
 	}
 
+	private void executeCallback(CallbackQuery query) throws Exception {
+		String data = query.getData();
+		EditMessageText editText = new EditMessageText();
+		editText.setChatId(query.getMessage().getChatId());
+		editText.setMessageId(query.getMessage().getMessageId());
+		if (data.contains("/reserve")) {
+			Reserve.reserveCallback(query, editText, pledges);
+		} else if (data.contains("/cancel")) {
+			data = data.replace("/cancel", "");
+			Reserve.deleteReservation(editText, data);
+		} else {
+			throw new IllegalArgumentException("Nicht erwartete Callback Query!");
+		}
+		editMessageText(editText);
+		AnswerCallbackQuery q = new AnswerCallbackQuery();
+		q.setCallbackQueryId(query.getId());
+		answerCallbackQuery(q);
+	}
+
 	public String getBotUsername() {
 		return "DailyPledgeBot";
 	}
@@ -162,5 +146,21 @@ public class PledgeBot extends TelegramLongPollingBot {
 			pledges = WebsiteReader.getPledges(Config.URL);
 			refreshTimestamp = now;
 		}
+	}
+
+	private void sendErrorToMe(Exception e) {
+		StringWriter sw = new StringWriter();
+		e.printStackTrace(new PrintWriter(sw));
+		String error = LocalDateTime.now() + " :\n" + sw.toString();
+		Logger.write(error);
+		SendMessage message = new SendMessage().setChatId(Config.MY_CHAT_ID);
+		message.setText(error);
+		try {
+			sendMessage(message);
+		} catch (TelegramApiException e1) {
+			Logger.write(e.getStackTrace().toString());
+			e1.printStackTrace();
+		}
+
 	}
 }

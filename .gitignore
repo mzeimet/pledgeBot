@@ -27,3 +27,4 @@ reservation.txt
 target/classes/mzeimet/telegram_bot/PledgeBot$1.class
 target/classes/mzeimet/telegram_bot/PledgeReservation.class
 /target/
+pledgeLog.txt
