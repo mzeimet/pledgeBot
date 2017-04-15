@@ -14,7 +14,7 @@ public class ShowTodayCronjob extends CronJob {
 	public void run() {
 		SendMessage message = new SendMessage().setChatId(Config.MY_CHAT_ID);
 		try {
-			bot.executeCommand(message, Config.SHOW_TODAY_PLEDGES_COMMAND);
+			bot.executeCommand(message, Config.SHOW_AVAILABLE_PLEDGES_COMMAND);
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
